@@ -543,7 +543,13 @@ pub fn play_file(path: &[u8]) -> i32 {
         let mut p = [0u8; PATH_MAX];
         p[..path.len()].copy_from_slice(path);
         let fd = fw_api::open(p.as_ptr(), 1, 0);
-        if fd < 0 { PLAYER.err = E_OPEN; return E_OPEN; }
+        if fd < 0 {
+            crate::log::kv("马达文件打开失败 ", (-fd) as u32);
+            PLAYER.err = E_OPEN; return E_OPEN;
+        }
+        let fsz = fw_api::lseek(fd, 0, fw_api::seek::END);
+        let _ = fw_api::lseek(fd, 0, fw_api::seek::SET);
+        crate::log::kv("马达文件字节 ", if fsz > 0 { fsz as u32 } else { 0 });
         PLAYER.fd = fd;
         PLAYER.path = p;
         PLAYER.path_len = path.len();
@@ -558,6 +564,7 @@ pub fn play_file(path: &[u8]) -> i32 {
         if rc < 0 { stop(); PLAYER.err = rc; return rc; }
         let rc = motor_start();
         if rc < 0 { stop(); PLAYER.err = rc; return rc; }
+        crate::log::kv("马达播放 ", rate);
 
         PLAYER.rate = rate;
         PLAYER.err = 0;
@@ -674,6 +681,7 @@ pub fn pump() -> i32 {
         let got = fw_api::read(PLAYER.fd, PLAYER.src.as_mut_ptr(), SRC_MAX as u32);
         if got < 0 { fail(got); return total; }
         if got == 0 {
+            crate::log::line("马达文件结束");
             stop();
             PLAYER.err = 2;
             return total;
@@ -720,6 +728,7 @@ unsafe fn feed_pending() -> i32 {
 
 fn fail(code: i32) {
     unsafe {
+        crate::log::kv("马达供数失败 ", (-code) as u32);
         PLAYER.err = code;
         stop();
     }
