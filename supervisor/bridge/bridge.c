@@ -103,6 +103,7 @@ struct rx_req {
     uint16_t len;
     void *session;
     uint8_t data[BRIDGE_FRAME_MAX];
+    uint8_t plain[BRIDGE_FRAME_MAX];
 };
 
 struct tx_req {
@@ -374,8 +375,7 @@ static void l2_rx(uint16_t handle, uint8_t channel, uint8_t opcode,
     if (opcode != BRIDGE_L2_WRITE_ENC || payload == 0 || len < CANOPUS_TRANSPORT_V2_HEADER_SIZE) {
         return;
     }
-    void *session = ((session_fn)L2_SESSION)(handle);
-    if (session == 0 || len > BRIDGE_FRAME_MAX) return;
+    if (len > BRIDGE_FRAME_MAX) return;
     uint32_t mask = irq_save();
     uint32_t slot = g_rx_write;
     if (g_rx[slot].state != 0u) {
@@ -386,12 +386,10 @@ static void l2_rx(uint16_t handle, uint8_t channel, uint8_t opcode,
     g_rx_write = (slot + 1u) % BRIDGE_RX_SLOTS;
     irq_restore(mask);
 
-    int ok = ((crypto_fn)L2_CRYPTO)(session, 0, len, payload, g_rx[slot].data) == 0;
-    if (!ok && !g_done_crypto) { g_done_crypto = 1; g_logged_crypto = 1; }
-    if (ok && !g_done_rx) { g_done_rx = 1; g_logged_rx = 1; }
-    g_rx[slot].len = ok ? len : 0u;
+    canopus_memcpy(g_rx[slot].data, payload, len);
+    g_rx[slot].len = len;
     g_rx[slot].handle = handle;
-    g_rx[slot].session = session;
+    g_rx[slot].session = 0;
     __asm__ volatile("dmb" ::: "memory");
     g_rx[slot].state = 2u;
 }
@@ -659,16 +657,24 @@ static void l2_poll(void)
     for (uint32_t served = 0; served < BRIDGE_RX_SLOTS; served++) {
         uint32_t slot = g_rx_read;
         if (g_rx[slot].state != 2u) break;
-        if (g_rx[slot].len != 0u &&
-            ((session_fn)L2_SESSION)(g_rx[slot].handle) == g_rx[slot].session) {
-            if (!g_connected || g_rx[slot].handle != g_last_handle ||
-                g_rx[slot].session != g_last_session) {
-                g_listener = 0;
+        if (g_rx[slot].len != 0u) {
+            void *session = ((session_fn)L2_SESSION)(g_rx[slot].handle);
+            if (session != 0) {
+                int ok = ((crypto_fn)L2_CRYPTO)(session, 0, g_rx[slot].len,
+                                                g_rx[slot].data, g_rx[slot].plain) == 0;
+                if (!ok && !g_done_crypto) { g_done_crypto = 1; g_logged_crypto = 1; }
+                if (ok) {
+                    if (!g_done_rx) { g_done_rx = 1; g_logged_rx = 1; }
+                    if (!g_connected || g_rx[slot].handle != g_last_handle ||
+                        session != g_last_session) {
+                        g_listener = 0;
+                    }
+                    g_last_handle = g_rx[slot].handle;
+                    g_last_session = session;
+                    g_connected = 1;
+                    handle_cpc2(g_rx[slot].plain, g_rx[slot].len);
+                }
             }
-            g_last_handle = g_rx[slot].handle;
-            g_last_session = g_rx[slot].session;
-            g_connected = 1;
-            handle_cpc2(g_rx[slot].data, g_rx[slot].len);
         }
         __asm__ volatile("dmb" ::: "memory");
         g_rx[slot].state = 0u;
