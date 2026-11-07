@@ -9,7 +9,7 @@
 8-bit 单声道 PCM 送进马达芯片的 RTP/FIFO，马达线圈按音频波形振动。
 
 ```
-/data/chaos/music/*.s8
+/data/wav/*.s8
   → 读 12 kHz、单声道、signed 8-bit
   → 芯片 1: 12 kHz 直出；芯片 2: 2× 复制到 24 kHz
   → 马达驱动 FIFO（每次最多 256 B，查 busy 位）
@@ -46,8 +46,7 @@
 - signed 8-bit（`-128..127`）
 - 无文件头
 
-放到 `/data/chaos/music/`，文件名以 `.s8` 结尾。安装器首次安装会创建这个目录；
-升级后如果目录不存在，手动 `mkdir -p /data/chaos/music`。
+放到 `/data/wav/`，文件名以 `.s8` 结尾。安装器首次安装会创建 `/data/wav`；它也是原项目的音频目录，已有文件可直接复用。
 
 生成示例（在电脑上）：
 
@@ -94,7 +93,7 @@ python3 tools/build.py
 3. 第一次点播放会先探测 `/dev/lra0`；若状态行报 `-102/-107`，说明驱动对象解析失败，
    先把页面/日志现象发回来。
 4. 点“测试音”。正常应是 2 秒的低频“嗡——”，不是系统通知振动。
-5. 放一首 `.s8` 到 `/data/chaos/music/`，点“重新扫描”，选中，播放。
+5. 放一首 `.s8` 到 `/data/wav/`，点“重新扫描”，选中，播放。
 6. 若声音是 2 倍速/半速，记录芯片编号和现象；这需要加采样率校准。
 7. 若出现异常振动、发热或停不下来，立即退出页面/重启；模块停止时会恢复寄存器。
 
@@ -108,4 +107,4 @@ python3 tools/build.py
 | `supervisor/src/ipc.rs` | 页名注册 |
 | `supervisor/src/page.rs` | `PAGE_TABLE` |
 | `supervisor/src/page/settings.rs` | 震动页入口 |
-| `installer/chaos_installer.lua` | 创建 `/data/chaos/music` |
+| `installer/chaos_installer.lua` | 创建 `/data/wav` |

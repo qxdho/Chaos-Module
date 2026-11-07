@@ -1,6 +1,6 @@
 //! 页37：马达音乐（S8 曲库 / 测试音）。
 //!
-//! 只读 `/data/chaos/music/*.s8`：12 kHz、单声道、signed 8-bit 裸音频。
+//! 只读 `/data/wav/*.s8`：12 kHz、单声道、signed 8-bit 裸音频。
 //! 播放引擎在 `crate::motor_audio`，这里只做扫描、选择和 UI。
 
 use crate::page::*;
@@ -11,7 +11,7 @@ use core::ptr;
 
 pub(crate) const MUSIC_PID: u32 = 37;
 
-const DIR: &[u8] = b"/data/chaos/music/\0";
+const DIR: &[u8] = b"/data/wav/\0";
 const MAX_TRACKS: usize = 6;
 const NAME_MAX: usize = 56;
 const PATH_MAX: usize = 96;
@@ -219,7 +219,7 @@ unsafe fn scan() {
 
     let dir = fw_api::opendir(DIR.as_ptr());
     if dir == 0 {
-        status_text(b"\xe6\x97\xa0 /data/chaos/music\0");
+        status_text(b"\xe6\x97\xa0 /data/wav\0");
         return;
     }
     let mut seen = 0usize;
@@ -244,7 +244,6 @@ unsafe fn scan() {
         seen += 1;
     }
     fw_api::closedir(dir);
-    DIRTY = 1;
     if seen == 0 {
         status_text(b"\xe6\x97\xa0 .s8 \xe6\x9b\xb2\xe7\x9b\xae\0");
     } else {
@@ -256,7 +255,7 @@ unsafe fn scan() {
 
 unsafe fn build_path(i: usize) -> usize {
     let mut w = 0usize;
-    let pre = b"/data/chaos/music/";
+    let pre = b"/data/wav/";
     for &c in pre { if w + 1 < PATH_MAX { PATH[w] = c; w += 1; } }
     let mut k = 0usize;
     while k < NAME_MAX && NAMES[i][k] != 0 && w + 1 < PATH_MAX {
@@ -279,6 +278,7 @@ unsafe fn play_selected() {
     let n = build_path(SEL);
     let rc = motor_audio::play_file(&PATH[..n]);
     if rc < 0 {
+        crate::log::kv("马达播放失败 ", (-rc) as u32);
         status_err(rc);
         set_timer(500);
         render_req(MUSIC_PID as usize);
@@ -293,8 +293,10 @@ unsafe fn play_tone() {
     ARM = 0;
     let rc = motor_audio::play_tone();
     if rc < 0 {
+        crate::log::kv("马达测试音失败 ", (-rc) as u32);
         status_err(rc);
         set_timer(500);
+        render_req(MUSIC_PID as usize);
         return;
     }
     status_text(b"\xe6\xb5\x8b\xe8\xaf\x95\xe9\x9f\xb3 220Hz\0");
@@ -305,8 +307,9 @@ unsafe fn play_tone() {
 // ===== 10 ms 泵 =====
 
 unsafe extern "C" fn pump_cb(_t: u32) {
+    let was_playing = motor_audio::is_playing();
     let _ = motor_audio::pump();
-    if !motor_audio::is_playing() {
+    if was_playing && !motor_audio::is_playing() {
         if motor_audio::status() == 2 {
             status_text(b"\xe6\x92\xad\xe6\x94\xbe\xe7\xbb\x93\xe6\x9d\x9f\0");
         } else if motor_audio::status() < 0 {

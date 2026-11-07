@@ -58,6 +58,7 @@ const E_READ: i32 = -105;
 const E_WRITE: i32 = -106;
 const E_OPS: i32 = -107;
 const E_STATE: i32 = -108;
+const E_STALL: i32 = -110;
 
 type FnResolve = unsafe extern "C" fn(i32, *mut u32, *mut u32) -> i32;
 type FnRead8 = unsafe extern "C" fn(u32, u32, *mut u8) -> i32;
@@ -395,6 +396,7 @@ struct Player {
     path_len: usize,
     pending_off: usize,
     pending_len: usize,
+    stall: u32,
 }
 
 impl Player {
@@ -414,6 +416,7 @@ impl Player {
             path_len: 0,
             pending_off: 0,
             pending_len: 0,
+            stall: 0,
         }
     }
 }
@@ -528,6 +531,7 @@ pub fn stop() {
         PLAYER.tone = false;
         PLAYER.pending_off = 0;
         PLAYER.pending_len = 0;
+        PLAYER.stall = 0;
         if PLAYER.fd >= 0 {
             fw_api::close(PLAYER.fd);
             PLAYER.fd = -1;
@@ -554,7 +558,13 @@ pub fn pump() -> i32 {
         // 先清掉上次因 FIFO 满而留下的尾巴，避免丢样本。
         let mut total = feed_pending();
         if !PLAYER.playing { return total; }
-        if PLAYER.pending_off < PLAYER.pending_len { return total; }
+        if PLAYER.pending_off < PLAYER.pending_len {
+            PLAYER.stall = PLAYER.stall.saturating_add(1);
+            if PLAYER.stall > 300 {
+                fail(E_STALL);
+            }
+            return total;
+        }
 
         if PLAYER.tone {
             if PLAYER.tone_left == 0 {
@@ -601,6 +611,7 @@ pub fn pump() -> i32 {
         PLAYER.pending_off = 0;
         PLAYER.pending_len = out_n;
         total += feed_pending();
+        if total > 0 { PLAYER.stall = 0; }
         total
     }
 }
