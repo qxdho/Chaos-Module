@@ -472,6 +472,7 @@ pub fn play_file(path: &[u8]) -> i32 {
             let _ = probe();
         }
         if PROBED_CHIP <= 0 { return PROBED_CHIP; }
+        crate::log::kv("马达探测 ", PROBED_CHIP.max(0) as u32);
         stop();
         if path.is_empty() || path.len() >= PATH_MAX { return -22; }
         let mut p = [0u8; PATH_MAX];
@@ -509,12 +510,22 @@ pub fn play_tone() -> i32 {
         if PROBED_CHIP <= 0 { return PROBED_CHIP; }
         stop();
         let rc = motor_open();
-        if rc < 0 { PLAYER.err = rc; return rc; }
+        if rc < 0 {
+            crate::log::kv("马达测试打开失败 ", (-rc) as u32);
+            PLAYER.err = rc; return rc;
+        }
         let rate = if MOTOR.chip == 2 { 24_000 } else { 12_000 };
         let rc = motor_configure(rate, 80);
-        if rc < 0 { stop(); PLAYER.err = rc; return rc; }
+        if rc < 0 {
+            crate::log::kv("马达测试配置失败 ", (-rc) as u32);
+            stop(); PLAYER.err = rc; return rc;
+        }
         let rc = motor_start();
-        if rc < 0 { stop(); PLAYER.err = rc; return rc; }
+        if rc < 0 {
+            crate::log::kv("马达测试启动失败 ", (-rc) as u32);
+            stop(); PLAYER.err = rc; return rc;
+        }
+        crate::log::kv("马达测试音 ", rate);
         PLAYER.rate = rate;
         PLAYER.tone = true;
         PLAYER.tone_left = rate * 2;
