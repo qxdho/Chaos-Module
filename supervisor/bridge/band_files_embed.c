@@ -932,8 +932,8 @@ static void bf_on_connect(const struct canopus_context_v1 *ctx, uint32_t kind,
     (void)user_data;
     if (kind != CANOPUS_CONNECT_BINARY || data == 0 || len == 0u) return;
 #ifdef BF_BRIDGE
-    /* 不在蓝牙/服务回调里直接做文件 I/O；只入队，由 owner timer 分发。 */
-    (void)chaos_bridge_l2_active();
+    /* L2 已接管时忽略重复的 Canopus 帧；否则只入队，由 owner timer 分发。 */
+    if (chaos_bridge_l2_active()) return;
     (void)chaos_bridge_post_frame((const uint8_t *)data, (uint16_t)len);
 #else
     bf_dispatch(ctx, (const uint8_t *)data, len);

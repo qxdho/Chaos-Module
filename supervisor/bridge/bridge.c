@@ -127,6 +127,7 @@ static int g_owner_init;
 static uint64_t g_owner_timer[(L2_OWNER_TIMER_SIZE + 7u) / 8u];
 static void *g_boot_timer;
 static int g_started;
+static int g_l2_hooked;
 static int g_logged_hook, g_logged_rx, g_logged_crypto, g_logged_send;
 static int g_done_hook, g_done_rx, g_done_crypto, g_done_send;
 static int g_bt_init;
@@ -406,6 +407,7 @@ static void l2_attach(void)
         volatile uint32_t *conn = (volatile uint32_t *)node[3];
         if (conn != 0 && conn[3] == (uint32_t)L2_RX) {
             conn[3] = (uint32_t)(uintptr_t)l2_rx;
+            g_l2_hooked = 1;
             if (!g_done_hook) { g_done_hook = 1; g_logged_hook = 1; }
         }
     }
@@ -416,6 +418,7 @@ static void l2_attach(void)
 /// another owner) already replaced it, leave that handler alone.
 static void l2_detach(void)
 {
+    g_l2_hooked = 0;
     volatile uint32_t *head = (volatile uint32_t *)L2_CONNECTIONS;
     uint32_t mask = irq_save();
     for (volatile uint32_t *node = (volatile uint32_t *)head[1];
@@ -654,6 +657,7 @@ static int bt_timer_start(uint32_t period)
 
 static void l2_poll(void)
 {
+    l2_attach();
     flush_logs();
     for (uint32_t served = 0; served < BRIDGE_RX_SLOTS; served++) {
         uint32_t slot = g_rx_read;
@@ -721,7 +725,7 @@ static void boot_tick(void *timer)
 
 int chaos_bridge_l2_active(void)
 {
-    return 0;
+    return g_l2_hooked;
 }
 
 /// Canopus listener / L2 RX 都只把帧拷进来；真正的协议分发和文件 I/O
@@ -756,6 +760,7 @@ int chaos_bridge_start(void)
         if (owner_timer_start(10u, owner_tick) != 0) return -1;
         g_started = 1;
         if (g_bt_init) (void)bt_timer_start(10u);
+        l2_attach();
         return 0;
     }
     if (g_boot_timer != 0) return 0;
