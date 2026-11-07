@@ -56,7 +56,9 @@ const E_CHIP: i32 = -103;
 const E_RATE: i32 = -104;
 const E_READ: i32 = -105;
 const E_WRITE: i32 = -106;
-const E_OPS: i32 = -107;
+// -107 保留给旧版；现在拆成 -120（ops 无效）/-121（reset 失败）。
+const E_OPS_INVALID: i32 = -120;
+const E_RESET: i32 = -121;
 const E_STATE: i32 = -108;
 const E_STALL: i32 = -110;
 
@@ -123,6 +125,10 @@ fn chip_from_fp(fp: u32) -> u32 {
         0x0C3F_DDE5 => 2,
         _ => 0,
     }
+}
+
+fn expected_ops(chip: u32) -> u32 {
+    if chip == 1 { 0x200C_BDF4 } else { 0x200C_B510 }
 }
 
 unsafe fn id_at(base: u32, chip: u32) -> u8 {
@@ -235,9 +241,19 @@ unsafe fn motor_open() -> i32 {
     } else { 0 };
     let nested = if crate::plausible_ptr(stage2) { rd32_at(stage2) } else { 0 };
     let mut base = 0u32;
+    let mut chip = 0u32;
+    let mut ops = 0u32;
     for cand in [nested, stage2, stage1, object] {
-        if cand != 0 && crate::plausible_ptr(cand) && chip_from_fp(rd32_at(cand)) != 0 {
+        if cand == 0 || !crate::plausible_ptr(cand) { continue; }
+        let c = chip_from_fp(rd32_at(cand));
+        if c == 0 { continue; }
+        let off = if c == 1 { CHIP1_OPS_OFF } else { CHIP2_OPS_OFF };
+        let o = rd32_at(cand.wrapping_add(off));
+        if base == 0 { base = cand; chip = c; ops = o; }
+        if o == expected_ops(c) {
             base = cand;
+            chip = c;
+            ops = o;
             break;
         }
     }
@@ -251,12 +267,12 @@ unsafe fn motor_open() -> i32 {
         fw_api::close(fd);
         return E_CHIP;
     }
-    let chip = chip_from_fp(rd32_at(base));
-    let ops_off = if chip == 1 { CHIP1_OPS_OFF } else { CHIP2_OPS_OFF };
-    let ops = rd32_at(base.wrapping_add(ops_off));
+    crate::log::kv("motor base ", base);
+    crate::log::kv("motor chip ", chip);
+    crate::log::kv("motor ops ", ops);
     if !crate::plausible_ptr(ops) {
         fw_api::close(fd);
-        return E_OPS;
+        return E_OPS_INVALID;
     }
     MOTOR.fd = fd;
     MOTOR.base = base;
@@ -278,7 +294,11 @@ unsafe fn motor_configure(rate: u32, gain: u32) -> i32 {
     let reset_off = if MOTOR.chip == 1 { CHIP1_RESET_OFF } else { CHIP2_RESET_OFF };
     let reset: FnOps1 = transmute(op_at(MOTOR.ops, reset_off) as usize);
     let rc = reset(MOTOR.base, 0);
-    if rc == 0 { motor_abort(); return E_OPS; }
+    if rc == 0 {
+        crate::log::kv("motor reset rc ", rc as u32);
+        motor_abort();
+        return E_RESET;
+    }
 
     // 保存芯片 ID / 状态，退出前若被别的路径改过则放弃恢复。
     MOTOR.count = if MOTOR.chip == 1 { 9 } else { 5 };
