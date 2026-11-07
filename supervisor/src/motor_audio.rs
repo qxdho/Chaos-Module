@@ -61,6 +61,8 @@ const E_OPS_INVALID: i32 = -120;
 const E_RESET: i32 = -121;
 const E_STATE: i32 = -108;
 const E_STALL: i32 = -110;
+const E_SHORT: i32 = -122;
+const E_FORMAT: i32 = -123;
 
 type FnResolve = unsafe extern "C" fn(i32, *mut u32, *mut u32) -> i32;
 type FnRead8 = unsafe extern "C" fn(u32, u32, *mut u8) -> i32;
@@ -550,6 +552,27 @@ pub fn play_file(path: &[u8]) -> i32 {
         let fsz = fw_api::lseek(fd, 0, fw_api::seek::END);
         let _ = fw_api::lseek(fd, 0, fw_api::seek::SET);
         crate::log::kv("马达文件字节 ", if fsz > 0 { fsz as u32 } else { 0 });
+        if fsz < 512 {
+            fw_api::close(fd);
+            PLAYER.err = E_SHORT;
+            return E_SHORT;
+        }
+        {
+            let mut head = [0u8; 4];
+            let n = fw_api::read(fd, head.as_mut_ptr(), 4);
+            let _ = fw_api::lseek(fd, 0, fw_api::seek::SET);
+            if n == 4 {
+                let mp3 = head == *b"ID3\x03" || head == *b"ID3\x04";
+                let wav = &head == b"RIFF";
+                let flac = &head == b"fLaC";
+                let ogg = &head == b"OggS";
+                if mp3 || wav || flac || ogg {
+                    fw_api::close(fd);
+                    PLAYER.err = E_FORMAT;
+                    return E_FORMAT;
+                }
+            }
+        }
         PLAYER.fd = fd;
         PLAYER.path = p;
         PLAYER.path_len = path.len();

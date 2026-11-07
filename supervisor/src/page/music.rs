@@ -282,6 +282,18 @@ unsafe fn play_selected() {
     let rc = motor_audio::play_file(&PATH[..n]);
     if rc < 0 {
         crate::log::kv("马达播放失败 ", (-rc) as u32);
+        if rc == -122 {
+            status_text(b"\xe6\x96\x87\xe4\xbb\xb6\xe5\xa4\xaa\xe7\x9f\xad\0");
+            set_timer(500);
+            render_req(MUSIC_PID as usize);
+            return;
+        }
+        if rc == -123 {
+            status_text(b"\xe4\xb8\x8d\xe6\x98\xaf S8 \xe6\x96\x87\xe4\xbb\xb6\0");
+            set_timer(500);
+            render_req(MUSIC_PID as usize);
+            return;
+        }
         status_err(rc);
         set_timer(500);
         render_req(MUSIC_PID as usize);
