@@ -345,7 +345,7 @@ unsafe fn motor_configure(rate: u32, gain: u32) -> i32 {
         if st < 0 { motor_abort(); return E_READ; }
         if (st as u8 & 0x30) == 0 { motor_abort(); return E_STATE; }
     } else {
-        let rc = bits(0x34, 0x40, 0x40);
+        let rc = bits(0x34, 6, 2);
         if rc < 0 { motor_abort(); return E_WRITE; }
     }
 
