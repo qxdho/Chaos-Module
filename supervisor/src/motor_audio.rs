@@ -199,27 +199,21 @@ unsafe fn motor_open() -> i32 {
         fw_api::close(fd);
         return E_RESOLVE;
     }
-    let stage1 = rd32_at(object.wrapping_add(0x10));
-    if !crate::plausible_ptr(stage1) {
-        fw_api::close(fd);
-        return E_RESOLVE;
-    }
-    let stage2 = rd32_at(stage1.wrapping_add(0x18));
-    if !crate::plausible_ptr(stage2) {
-        fw_api::close(fd);
-        return E_RESOLVE;
-    }
-    let base = rd32_at(stage2);
-    if !crate::plausible_ptr(base) {
-        fw_api::close(fd);
-        return E_RESOLVE;
-    }
-    let fingerprint = rd32_at(base);
     let expect = if chip == 1 { 0x0C40_12F5 } else { 0x0C3F_DDE5 };
-    if fingerprint != expect {
+    let stage1 = rd32_at(object.wrapping_add(0x10));
+    let stage2 = if crate::plausible_ptr(stage1) {
+        rd32_at(stage1.wrapping_add(0x18))
+    } else { 0 };
+    let nested = if crate::plausible_ptr(stage2) { rd32_at(stage2) } else { 0 };
+    // 正常固件返回 object，需要走三级；少数实现直接把 chip 对象放在第一个输出里。
+    let base = if crate::plausible_ptr(nested) && rd32_at(nested) == expect {
+        nested
+    } else if rd32_at(object) == expect {
+        object
+    } else {
         fw_api::close(fd);
         return E_CHIP;
-    }
+    };
     let ops_off = if chip == 1 { CHIP1_OPS_OFF } else { CHIP2_OPS_OFF };
     let ops = rd32_at(base.wrapping_add(ops_off));
     if !crate::plausible_ptr(ops) {
