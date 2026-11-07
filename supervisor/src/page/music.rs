@@ -1,4 +1,4 @@
-//! 页37：马达音乐（S8 曲库 / 测试音）。
+//! 页38：马达音乐（S8 曲库 / 测试音）。
 //!
 //! 只读 `/data/wav/*.s8`：12 kHz、单声道、signed 8-bit 裸音频。
 //! 播放引擎在 `crate::motor_audio`，这里只做扫描、选择和 UI。
@@ -9,7 +9,7 @@ use crate::motor_audio;
 
 use core::ptr;
 
-pub(crate) const MUSIC_PID: u32 = 37;
+pub(crate) const MUSIC_PID: u32 = 38;
 
 const DIR: &[u8] = b"/data/wav/\0";
 const MAX_TRACKS: usize = 6;

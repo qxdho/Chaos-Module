@@ -102,8 +102,8 @@ python3 tools/build.py
 | 文件 | 内容 |
 |---|---|
 | `supervisor/src/motor_audio.rs` | 马达打开/解析、寄存器快照、FIFO 喂数、S8/测试音播放 |
-| `supervisor/src/page/music.rs` | 页 37 UI、曲库扫描、10 ms 泵 |
-| `supervisor/src/state.rs` | `PAGE_COUNT=38`、`PAGE_MUSIC` |
+| `supervisor/src/page/music.rs` | 页 38 UI、曲库扫描、10 ms 泵 |
+| `supervisor/src/state.rs` | `PAGE_COUNT=39`、`PAGE_MUSIC` |
 | `supervisor/src/ipc.rs` | 页名注册 |
 | `supervisor/src/page.rs` | `PAGE_TABLE` |
 | `supervisor/src/page/settings.rs` | 震动页入口 |

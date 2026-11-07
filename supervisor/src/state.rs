@@ -188,12 +188,14 @@ pub static PAGE_NETINFO: [u8; 8] = *b"netinfo\0";
 pub static PAGE_EXP: [u8; 7] = *b"exp\0\0\0\0";
 /// 页36: 实验性功能 -> 蓝牙诊断(配对/回调/IPC 现场)。
 pub static PAGE_BTDIAG: [u8; 8] = *b"btdiag\0\0";
-/// 页37: 主页 -> 震动 -> 马达音乐(S8)。
+/// 页37: 调试模式 -> 调试信息(纯文本)。
+pub static PAGE_DEBUG: [u8; 7] = *b"debug\0\0";
+/// 页38: 主页 -> 震动 -> 马达音乐(S8)。
 pub static PAGE_MUSIC: [u8; 8] = *b"music\0\0\0";
 
 pub static mut APP_META: [u32; 16] = [0; 16];
 
-pub const PAGE_COUNT: usize = 38;                   // 注册页数(页0..页37)
+pub const PAGE_COUNT: usize = 39;                   // 注册页数(页0..页38)
 pub const MAX_PID: usize = PAGE_COUNT - 1;          // 页号上界, 所有 pid 校验统一引用它
 pub static mut DESC: [u32; PAGE_COUNT * 29] = [0; PAGE_COUNT * 29]; // 116B/页
 
