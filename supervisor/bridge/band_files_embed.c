@@ -78,6 +78,7 @@ static const struct canopus_context_v1 *g_ctx;
 static uint8_t g_dev_mode;
 
 static int32_t g_read_fd = -1;
+static volatile int g_dispatch_busy;
 static uint32_t g_read_size;
 static int32_t g_write_fd = -1;
 static char g_write_target[CANOPUS_FS_PATH_MAX];
@@ -262,23 +263,32 @@ static void bf_event(const struct canopus_context_v1 *ctx, uint8_t code,
 
 static void bf_close_read(void)
 {
-    if (g_read_fd >= 0 && g_ctx != 0 && g_ctx->fs != 0 && g_ctx->fs->close) {
-        (void)g_ctx->fs->close(g_ctx, g_read_fd);
-    }
+    int32_t fd = g_read_fd;
     g_read_fd = -1;
     g_read_size = 0;
+    if (fd >= 0 && g_ctx != 0 && g_ctx->fs != 0 && g_ctx->fs->close) {
+        (void)g_ctx->fs->close(g_ctx, fd);
+    }
 }
 
 static void bf_discard_write(void)
 {
-    if (g_write_fd >= 0 && g_ctx != 0 && g_ctx->fs != 0 && g_ctx->fs->close) {
-        (void)g_ctx->fs->close(g_ctx, g_write_fd);
-    }
+    int32_t fd = g_write_fd;
+    char temp[CANOPUS_FS_PATH_MAX];
+    uint32_t i;
     g_write_fd = -1;
-    if (g_write_temp[0] != '\0' && g_ctx != 0 && g_ctx->fs != 0 && g_ctx->fs->remove) {
-        (void)g_ctx->fs->remove(g_ctx, g_write_temp);
+    for (i = 0; i < CANOPUS_FS_PATH_MAX; i++) {
+        temp[i] = g_write_temp[i];
+        if (temp[i] == '\0') break;
     }
+    if (i >= CANOPUS_FS_PATH_MAX) temp[CANOPUS_FS_PATH_MAX - 1u] = '\0';
     g_write_temp[0] = '\0';
+    if (fd >= 0 && g_ctx != 0 && g_ctx->fs != 0 && g_ctx->fs->close) {
+        (void)g_ctx->fs->close(g_ctx, fd);
+    }
+    if (temp[0] != '\0' && g_ctx != 0 && g_ctx->fs != 0 && g_ctx->fs->remove) {
+        (void)g_ctx->fs->remove(g_ctx, temp);
+    }
     g_write_target[0] = '\0';
     g_write_expected = 0;
     g_write_written = 0;
@@ -807,8 +817,11 @@ static void bf_handle_commit(const struct canopus_context_v1 *ctx, uint16_t req,
         return;
     }
     if (ctx->fs->sync != 0) (void)ctx->fs->sync(ctx, g_write_fd);
-    rc = ctx->fs->close(ctx, g_write_fd);
-    g_write_fd = -1;
+    {
+        int32_t fd = g_write_fd;
+        g_write_fd = -1;
+        rc = ctx->fs->close(ctx, fd);
+    }
     if (rc < 0) {
         bf_discard_write();
         bf_send(ctx, BF_OP_COMMIT, req, bf_status_from_err(rc), 0, 0);
@@ -1010,6 +1023,16 @@ __attribute__((constructor)) static void bf_module_entry(
 void bf_embed_dispatch(const struct canopus_context_v1 *ctx,
                        const uint8_t *data, uint32_t len)
 {
+    /* Two entry paths can deliver the same frame (Canopus connect listener and
+     * Chaos L2 owner loop). Never run two file operations against the shared
+     * read/write fd at once; the loser gets BUSY and the client retries. */
+    if (__atomic_test_and_set(&g_dispatch_busy, __ATOMIC_ACQUIRE)) {
+        if (len >= 3u) {
+            bf_send(ctx, data[0], bf_get_u16(data + 1u), BF_ST_BUSY, 0, 0);
+        }
+        return;
+    }
     bf_dispatch(ctx, data, len);
+    __atomic_clear(&g_dispatch_busy, __ATOMIC_RELEASE);
 }
 #endif
