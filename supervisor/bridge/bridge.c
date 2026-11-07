@@ -103,7 +103,8 @@ struct rx_req {
     uint16_t len;
     void *session;
     uint8_t data[BRIDGE_FRAME_MAX];
-    uint8_t plain[BRIDGE_FRAME_MAX];
+    uint8_t dec[BRIDGE_FRAME_MAX];
+    uint8_t kind;
 };
 
 struct tx_req {
@@ -390,6 +391,7 @@ static void l2_rx(uint16_t handle, uint8_t channel, uint8_t opcode,
     g_rx[slot].len = len;
     g_rx[slot].handle = handle;
     g_rx[slot].session = 0;
+    g_rx[slot].kind = 0;
     __asm__ volatile("dmb" ::: "memory");
     g_rx[slot].state = 2u;
 }
@@ -652,16 +654,17 @@ static int bt_timer_start(uint32_t period)
 
 static void l2_poll(void)
 {
-    l2_attach();
     flush_logs();
     for (uint32_t served = 0; served < BRIDGE_RX_SLOTS; served++) {
         uint32_t slot = g_rx_read;
         if (g_rx[slot].state != 2u) break;
-        if (g_rx[slot].len != 0u) {
+        if (g_rx[slot].len != 0u && g_rx[slot].kind == 1u) {
+            bf_embed_dispatch(&g_ctx, g_rx[slot].data, g_rx[slot].len);
+        } else if (g_rx[slot].len != 0u) {
             void *session = ((session_fn)L2_SESSION)(g_rx[slot].handle);
             if (session != 0) {
                 int ok = ((crypto_fn)L2_CRYPTO)(session, 0, g_rx[slot].len,
-                                                g_rx[slot].data, g_rx[slot].plain) == 0;
+                                                g_rx[slot].data, g_rx[slot].dec) == 0;
                 if (!ok && !g_done_crypto) { g_done_crypto = 1; g_logged_crypto = 1; }
                 if (ok) {
                     if (!g_done_rx) { g_done_rx = 1; g_logged_rx = 1; }
@@ -672,7 +675,7 @@ static void l2_poll(void)
                     g_last_handle = g_rx[slot].handle;
                     g_last_session = session;
                     g_connected = 1;
-                    handle_cpc2(g_rx[slot].plain, g_rx[slot].len);
+                    handle_cpc2(g_rx[slot].dec, g_rx[slot].len);
                 }
             }
         }
@@ -718,7 +721,31 @@ static void boot_tick(void *timer)
 
 int chaos_bridge_l2_active(void)
 {
-    return g_started;
+    return 0;
+}
+
+/// Canopus listener / L2 RX 都只把帧拷进来；真正的协议分发和文件 I/O
+/// 全部在 owner timer 里做，避免在蓝牙栈上开文件。
+int chaos_bridge_post_frame(const uint8_t *data, uint16_t len)
+{
+    if (data == 0 || len == 0u || len > BRIDGE_FRAME_MAX) return -1;
+    uint32_t mask = irq_save();
+    uint32_t slot = g_rx_write;
+    if (g_rx[slot].state != 0u) {
+        irq_restore(mask);
+        return -1;
+    }
+    g_rx[slot].state = 1u;
+    g_rx_write = (slot + 1u) % BRIDGE_RX_SLOTS;
+    irq_restore(mask);
+    canopus_memcpy(g_rx[slot].data, data, len);
+    g_rx[slot].len = len;
+    g_rx[slot].handle = 0;
+    g_rx[slot].session = 0;
+    g_rx[slot].kind = 1;
+    __asm__ volatile("dmb" ::: "memory");
+    g_rx[slot].state = 2u;
+    return 0;
 }
 
 int chaos_bridge_start(void)
@@ -729,7 +756,6 @@ int chaos_bridge_start(void)
         if (owner_timer_start(10u, owner_tick) != 0) return -1;
         g_started = 1;
         if (g_bt_init) (void)bt_timer_start(10u);
-        l2_attach();
         return 0;
     }
     if (g_boot_timer != 0) return 0;
