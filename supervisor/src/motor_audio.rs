@@ -640,6 +640,9 @@ pub fn play_tone() -> i32 {
 
 pub fn stop() {
     unsafe {
+        if PLAYER.playing {
+            crate::log::line("马达停止(播放中)");
+        }
         PLAYER.playing = false;
         PLAYER.tone = false;
         PLAYER.pending_off = 0;
@@ -732,6 +735,10 @@ pub fn pump() -> i32 {
             return total;
         }
         PLAYER.read_retry = 0;
+        if PLAYER.read_logs < 5 {
+            PLAYER.read_logs += 1;
+            crate::log::kv("马达读 ", got as u32);
+        }
         let n = got as usize;
         let out_n = if PLAYER.rate == 24_000 {
             for i in 0..n {
