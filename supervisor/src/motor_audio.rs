@@ -317,6 +317,7 @@ unsafe fn ensure_fifo() -> bool {
     let v = read8(REG_FIFO_CTRL);
     if v < 0 || (v as u8 & 0x03) != 0x03 { return false; }
     MOTOR.fifo_ready = true;
+    crate::log::kv("马达FIFO就绪 ", MOTOR.chip);
     true
 }
 
@@ -407,6 +408,7 @@ struct Player {
     pending_off: usize,
     pending_len: usize,
     stall: u32,
+    logged_feed: bool,
 }
 
 impl Player {
@@ -427,6 +429,7 @@ impl Player {
             pending_off: 0,
             pending_len: 0,
             stall: 0,
+            logged_feed: false,
         }
     }
 }
@@ -553,6 +556,7 @@ pub fn stop() {
         PLAYER.pending_off = 0;
         PLAYER.pending_len = 0;
         PLAYER.stall = 0;
+        PLAYER.logged_feed = false;
         if PLAYER.fd >= 0 {
             fw_api::close(PLAYER.fd);
             PLAYER.fd = -1;
@@ -637,7 +641,13 @@ pub fn pump() -> i32 {
         PLAYER.pending_off = 0;
         PLAYER.pending_len = out_n;
         total += feed_pending();
-        if total > 0 { PLAYER.stall = 0; }
+        if total > 0 {
+            PLAYER.stall = 0;
+            if !PLAYER.logged_feed {
+                PLAYER.logged_feed = true;
+                crate::log::kv("马达FIFO写入 ", total as u32);
+            }
+        }
         total
     }
 }
