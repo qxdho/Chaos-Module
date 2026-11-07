@@ -206,6 +206,10 @@ unsafe fn motor_open() -> i32 {
             return E_RESOLVE;
         }
     }
+    // 少数实现把 object 放在返回值里；返回值为正且像指针时补到 first。
+    if first == 0 && crate::plausible_ptr(rc as u32) {
+        first = rc as u32;
+    }
     // 不同固件/封装可能把 (object, chip) 两个输出写反；按内容判定。
     let (object, chip) = if crate::plausible_ptr(first) && (second == 1 || second == 2) {
         (first, second)
