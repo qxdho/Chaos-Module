@@ -117,6 +117,14 @@ unsafe fn op_at(ops: u32, off: u32) -> u32 {
     rd32_at(ops.wrapping_add(off))
 }
 
+fn chip_from_fp(fp: u32) -> u32 {
+    match fp {
+        0x0C40_12F5 => 1,
+        0x0C3F_DDE5 => 2,
+        _ => 0,
+    }
+}
+
 unsafe fn id_at(base: u32, chip: u32) -> u8 {
     ptr::read_volatile(base.wrapping_add(if chip == 1 { 0x470 } else { 0x480 }) as *const u8)
 }
@@ -210,32 +218,40 @@ unsafe fn motor_open() -> i32 {
     if first == 0 && crate::plausible_ptr(rc as u32) {
         first = rc as u32;
     }
-    // 不同固件/封装可能把 (object, chip) 两个输出写反；按内容判定。
-    let (object, chip) = if crate::plausible_ptr(first) && (second == 1 || second == 2) {
-        (first, second)
-    } else if crate::plausible_ptr(second) && (first == 1 || first == 2) {
-        (second, first)
+    // 这个 ioctl 只保证写对象指针；芯片号由对象首字的函数指纹决定。
+    let object = if crate::plausible_ptr(first) {
+        first
+    } else if crate::plausible_ptr(second) {
+        second
     } else {
         crate::log::kv("resolve A ", first);
         crate::log::kv("resolve B ", second);
         fw_api::close(fd);
         return E_RESOLVE;
     };
-    let expect = if chip == 1 { 0x0C40_12F5 } else { 0x0C3F_DDE5 };
     let stage1 = rd32_at(object.wrapping_add(0x10));
     let stage2 = if crate::plausible_ptr(stage1) {
         rd32_at(stage1.wrapping_add(0x18))
     } else { 0 };
     let nested = if crate::plausible_ptr(stage2) { rd32_at(stage2) } else { 0 };
-    // 正常固件返回 object，需要走三级；少数实现直接把 chip 对象放在第一个输出里。
-    let base = if crate::plausible_ptr(nested) && rd32_at(nested) == expect {
-        nested
-    } else if rd32_at(object) == expect {
-        object
-    } else {
+    let mut base = 0u32;
+    for cand in [nested, stage2, stage1, object] {
+        if cand != 0 && crate::plausible_ptr(cand) && chip_from_fp(rd32_at(cand)) != 0 {
+            base = cand;
+            break;
+        }
+    }
+    if base == 0 {
+        crate::log::kv("resolve A ", first);
+        crate::log::kv("resolve B ", second);
+        crate::log::kv("resolve fp ", rd32_at(object));
+        crate::log::kv("resolve s1 ", stage1);
+        crate::log::kv("resolve s2 ", stage2);
+        crate::log::kv("resolve n ", nested);
         fw_api::close(fd);
         return E_CHIP;
-    };
+    }
+    let chip = chip_from_fp(rd32_at(base));
     let ops_off = if chip == 1 { CHIP1_OPS_OFF } else { CHIP2_OPS_OFF };
     let ops = rd32_at(base.wrapping_add(ops_off));
     if !crate::plausible_ptr(ops) {
