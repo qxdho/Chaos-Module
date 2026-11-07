@@ -137,7 +137,8 @@ impl Page for MusicPage {
 
     fn tick(&self) {
         unsafe {
-            if TIMER == 0 { let _ = motor_audio::pump(); }
+            // 10ms 定时器在部分固件上只触发一次；页面 tick 始终兜底供数。
+            if motor_audio::is_playing() { let _ = motor_audio::pump(); }
             if DIRTY != 0 {
                 DIRTY = 0;
                 render_req(MUSIC_PID as usize);
