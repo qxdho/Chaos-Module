@@ -489,6 +489,7 @@ impl Player {
 }
 
 static mut PLAYER: Player = Player::new();
+static mut PUMP_CALLS: u32 = 0;
 
 /// 0=空闲，1=播放中，2=播放结束，<0=错误。
 pub fn status() -> i32 {
@@ -592,6 +593,7 @@ pub fn play_file(path: &[u8]) -> i32 {
         PLAYER.rate = rate;
         PLAYER.err = 0;
         PLAYER.playing = true;
+        PUMP_CALLS = 0;
         OK
     }
 }
@@ -627,6 +629,7 @@ pub fn play_tone() -> i32 {
         PLAYER.tone_phase = 0;
         PLAYER.err = 0;
         PLAYER.playing = true;
+        PUMP_CALLS = 0;
         OK
     }
 }
@@ -660,6 +663,10 @@ fn tone_byte(phase: &mut u32, step: u32) -> u8 {
 /// 10 ms 定时器/页面 tick 调用。返回本次写入 FIFO 的字节数。
 pub fn pump() -> i32 {
     unsafe {
+        PUMP_CALLS = PUMP_CALLS.wrapping_add(1);
+        if PUMP_CALLS <= 3 || PUMP_CALLS % 100 == 0 {
+            crate::log::kv("马达泵 ", PUMP_CALLS);
+        }
         if !PLAYER.playing { return 0; }
         if !ensure_fifo() {
             PLAYER.stall = PLAYER.stall.saturating_add(1);
