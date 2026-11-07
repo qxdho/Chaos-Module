@@ -921,11 +921,20 @@ static void bf_dispatch(const struct canopus_context_v1 *ctx, const uint8_t *dat
     }
 }
 
+#ifdef BF_BRIDGE
+extern int chaos_bridge_l2_active(void);
+#endif
+
 static void bf_on_connect(const struct canopus_context_v1 *ctx, uint32_t kind,
                           const void *data, uint32_t len, void *user_data)
 {
     (void)user_data;
     if (kind != CANOPUS_CONNECT_BINARY || data == 0 || len == 0u) return;
+#ifdef BF_BRIDGE
+    /* L2 0x43 owner loop 已经在处理；这条回调跑在蓝牙线程，重复在这里做
+     * 大文件读写会把 BT 栈卡到看门狗。只保留一条投递路径。 */
+    if (chaos_bridge_l2_active()) return;
+#endif
     bf_dispatch(ctx, (const uint8_t *)data, len);
 }
 

@@ -710,6 +710,11 @@ static void boot_tick(void *timer)
     l2_poll();
 }
 
+int chaos_bridge_l2_active(void)
+{
+    return g_started;
+}
+
 int chaos_bridge_start(void)
 {
     if (g_started) return 0;
