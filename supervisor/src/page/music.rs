@@ -26,7 +26,7 @@ impl Page for MusicPage {
 
     fn render(&self, ctx: &PageCtx) -> PageResult {
         unsafe {
-            if TRACK_N == 0 {
+            if SCANNED == 0 {
                 scan();
             }
             let n = TRACK_N;
@@ -121,6 +121,7 @@ impl Page for MusicPage {
                 }
                 10 => {
                     ARM = 0;
+                    SCANNED = 0;
                     TRACK_N = 0;
                     render_req(MUSIC_PID as usize);
                 }
@@ -154,6 +155,7 @@ static mut PATH: [u8; PATH_MAX] = [0; PATH_MAX];
 static mut TIMER: u32 = 0;
 static mut TIMER_PERIOD: u32 = 0;
 static mut DIRTY: u32 = 0;
+static mut SCANNED: u32 = 0;
 static mut ARM: u32 = 0;
 
 pub(crate) static PAGE_MUSIC: MusicPage = MusicPage;
@@ -213,6 +215,7 @@ unsafe fn vol_text() {
 // ===== 曲库扫描 =====
 
 unsafe fn scan() {
+    SCANNED = 1;
     TRACK_N = 0;
     SEL = 0;
     for i in 0..MAX_TRACKS { NAMES[i] = [0; NAME_MAX]; }
