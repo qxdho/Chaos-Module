@@ -75,6 +75,7 @@ struct Motor {
     ops: u32,
     ready: bool,
     running: bool,
+    fifo_ready: bool,
     count: usize,
     regs: [u8; 9],
     vals: [u8; 9],
@@ -93,6 +94,7 @@ impl Motor {
             ops: 0,
             ready: false,
             running: false,
+            fifo_ready: false,
             count: 0,
             regs: [0; 9],
             vals: [0; 9],
@@ -230,6 +232,7 @@ unsafe fn motor_open() -> i32 {
     MOTOR.ops = ops;
     MOTOR.ready = false;
     MOTOR.running = false;
+    MOTOR.fifo_ready = false;
     OK
 }
 
@@ -243,7 +246,7 @@ unsafe fn motor_configure(rate: u32, gain: u32) -> i32 {
     let reset_off = if MOTOR.chip == 1 { CHIP1_RESET_OFF } else { CHIP2_RESET_OFF };
     let reset: FnOps1 = transmute(op_at(MOTOR.ops, reset_off) as usize);
     let rc = reset(MOTOR.base, 0);
-    if rc <= 0 { motor_abort(); return E_OPS; }
+    if rc == 0 { motor_abort(); return E_OPS; }
 
     // 保存芯片 ID / 状态，退出前若被别的路径改过则放弃恢复。
     MOTOR.count = if MOTOR.chip == 1 { 9 } else { 5 };
@@ -279,8 +282,7 @@ unsafe fn motor_configure(rate: u32, gain: u32) -> i32 {
     if rc < 0 { motor_abort(); return E_WRITE; }
 
     let mode: FnOps1 = transmute(op_at(MOTOR.ops, OPS_MODE) as usize);
-    let rc = mode(MOTOR.base, 2);
-    if rc < 0 { motor_abort(); return E_OPS; }
+    let _ = mode(MOTOR.base, 2);
 
     if MOTOR.chip == 1 {
         let zero = read8(0x5D5);
@@ -301,14 +303,21 @@ unsafe fn motor_configure(rate: u32, gain: u32) -> i32 {
 unsafe fn motor_start() -> i32 {
     if !MOTOR.ready { return E_STATE; }
     let start: FnOps1 = transmute(op_at(MOTOR.ops, OPS_START) as usize);
-    let rc = start(MOTOR.base, 1);
-    if rc < 0 { return E_OPS; }
-    let rc = bits(REG_FIFO_CTRL, 0x03, 0x03);
-    if rc < 0 { return E_WRITE; }
-    let v = read8(REG_FIFO_CTRL);
-    if v < 0 || (v as u8 & 0x03) != 0x03 { return E_STATE; }
+    let _ = start(MOTOR.base, 1);
     MOTOR.running = true;
+    MOTOR.fifo_ready = false;
     OK
+}
+
+/// 芯片 start 后需要一点时间才接受 FIFO 使能；由 10 ms 泵重试，不阻塞 UI。
+unsafe fn ensure_fifo() -> bool {
+    if MOTOR.fifo_ready { return true; }
+    let rc = bits(REG_FIFO_CTRL, 0x03, 0x03);
+    if rc < 0 { return false; }
+    let v = read8(REG_FIFO_CTRL);
+    if v < 0 || (v as u8 & 0x03) != 0x03 { return false; }
+    MOTOR.fifo_ready = true;
+    true
 }
 
 unsafe fn motor_gain(gain: u32) -> i32 {
@@ -359,6 +368,7 @@ unsafe fn motor_abort() {
     }
     MOTOR.ready = false;
     MOTOR.running = false;
+    MOTOR.fifo_ready = false;
     fw_api::close(MOTOR.fd);
     MOTOR.fd = -1;
     MOTOR.base = 0;
@@ -565,6 +575,11 @@ fn tone_byte(phase: &mut u32, step: u32) -> u8 {
 pub fn pump() -> i32 {
     unsafe {
         if !PLAYER.playing { return 0; }
+        if !ensure_fifo() {
+            PLAYER.stall = PLAYER.stall.saturating_add(1);
+            if PLAYER.stall > 300 { fail(E_STALL); }
+            return 0;
+        }
 
         // 先清掉上次因 FIFO 满而留下的尾巴，避免丢样本。
         let mut total = feed_pending();
