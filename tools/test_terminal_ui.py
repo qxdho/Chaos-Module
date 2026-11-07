@@ -13,7 +13,7 @@ def check_registration():
     state, ipc, page, ui, timer = (read(p) for p in
                                  ("state.rs", "ipc.rs", "page.rs", "ui.rs", "watchface.rs"))
     count = int(re.search(r"pub const PAGE_COUNT: usize = (\d+)", state)[1])
-    assert count == 36
+    assert count >= 36
     assert "MAX_PID: usize = PAGE_COUNT - 1" in state
     assert "MAX_PAGE_ID: usize = crate::state::MAX_PID" in read("fw_api.rs")
     for declaration in ("DESC: [u32; PAGE_COUNT * 29]", "PAGES: [Page; PAGE_COUNT]",

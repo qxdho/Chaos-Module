@@ -46,6 +46,7 @@ mod btpan;
 
 mod text;
 mod watchface;
+mod motor_audio;
 mod page;
 mod ui;
 mod ipc;

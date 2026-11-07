@@ -227,9 +227,11 @@ end
 -- 顺带清掉早期扁平布局的残留(/data/chaos/icons/*.bin, 约 1.9MB): 那时素材直接
 -- 铺在 icons/ 下; 现在每个包一个子目录(icons/<包号>/, 由投递脚本建), 通配不会误删。
 local ICON_DIR = DATA_DIR .. "/icons"
+local MUSIC_DIR = DATA_DIR .. "/music"
 local function stage_icons()
   exec("mkdir -p " .. DATA_DIR)
   exec("mkdir -p " .. ICON_DIR)
+  exec("mkdir -p " .. MUSIC_DIR)
   exec("rm -f " .. ICON_DIR .. "/*.bin")
   local ok, err = stage_resource(ICON_RESOURCE, ICON_PATH)
   if not ok then return ok, err end

@@ -217,6 +217,7 @@ impl Page for VibPage {
                 (0, RowSpec::switch("滑动列表震动\0".as_bytes())),
                 (1, RowSpec::switch("右滑返回震动\0".as_bytes())),
                 (2, RowSpec::clickable("测试震动\0".as_bytes())),
+                (3, RowSpec::clickable("马达音乐\0".as_bytes())),
                 (11, RowSpec::clickable("返回\0".as_bytes()))])?;
             fw_api::row_update(core::ptr::read_volatile(ctx.rows.add(0)),
                 fw_api::NONE_PTR, fw_api::NONE_PTR, fw_api::NONE_PTR,
@@ -231,6 +232,7 @@ impl Page for VibPage {
     fn on_click(&self, idx: usize) {
         unsafe {
             if idx == 2 { crate::background_home::vib_test_req(); }
+            else if idx == 3 { nav_goto(37, 0); }
             else if idx == 11 { nav_back(); }
         }
     }

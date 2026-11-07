@@ -31,3 +31,23 @@ jobs:
           name: chaos_sup.ko
           path: supervisor/chaos_sup.ko
           if-no-files-found: error
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (host tests)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build preflight tests
+        run: python3 tools/test_build.py
+
+      - name: NSH registration/lifecycle tests
+        run: python3 tools/test_terminal_ui.py
