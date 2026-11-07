@@ -31,7 +31,7 @@ flip=0
  +20: .. 翻转前那一刻的同一段 ..
 -- system --
 top 200:37
-pages 38
+pages 39
 ```
 
 - `disp`：`lv_display_get_default()` 返回的显示对象指针；
