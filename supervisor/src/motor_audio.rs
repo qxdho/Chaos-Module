@@ -462,6 +462,8 @@ struct Player {
     pending_off: usize,
     pending_len: usize,
     stall: u32,
+    read_retry: u32,
+    read_logs: u32,
     logged_feed: bool,
 }
 
@@ -483,6 +485,8 @@ impl Player {
             pending_off: 0,
             pending_len: 0,
             stall: 0,
+            read_retry: 0,
+            read_logs: 0,
             logged_feed: false,
         }
     }
@@ -641,6 +645,8 @@ pub fn stop() {
         PLAYER.pending_off = 0;
         PLAYER.pending_len = 0;
         PLAYER.stall = 0;
+        PLAYER.read_retry = 0;
+        PLAYER.read_logs = 0;
         PLAYER.logged_feed = false;
         if PLAYER.fd >= 0 {
             fw_api::close(PLAYER.fd);
@@ -711,11 +717,21 @@ pub fn pump() -> i32 {
         let got = fw_api::read(PLAYER.fd, PLAYER.src.as_mut_ptr(), SRC_MAX as u32);
         if got < 0 { fail(got); return total; }
         if got == 0 {
+            // 部分 Yaffs/驱动在跨块时会给一次 0；再给几次机会，避免误判 EOF。
+            PLAYER.read_retry = PLAYER.read_retry.saturating_add(1);
+            if PLAYER.read_retry <= 8 {
+                if PLAYER.read_logs < 4 {
+                    PLAYER.read_logs += 1;
+                    crate::log::kv("马达读空 ", PLAYER.read_retry);
+                }
+                return total;
+            }
             crate::log::line("马达文件结束");
             stop();
             PLAYER.err = 2;
             return total;
         }
+        PLAYER.read_retry = 0;
         let n = got as usize;
         let out_n = if PLAYER.rate == 24_000 {
             for i in 0..n {
