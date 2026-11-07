@@ -190,10 +190,21 @@ unsafe fn motor_open() -> i32 {
     let mut first = 0u32;
     let mut second = 0u32;
     let f: FnResolve = transmute(FN_RESOLVE as usize);
-    let rc = f(fd, &mut first as *mut u32, &mut second as *mut u32);
+    let mut rc = f(fd, &mut first as *mut u32, &mut second as *mut u32);
     if rc < 0 {
-        fw_api::close(fd);
-        return E_RESOLVE;
+        crate::log::kv("resolve 失败 ", (-rc) as u32);
+        // 驱动可能刚被 vibratord 占用/复位，给两次短重试。
+        for _ in 0..2 {
+            let _ = fw_api::nsh_usleep(20_000);
+            first = 0;
+            second = 0;
+            rc = f(fd, &mut first as *mut u32, &mut second as *mut u32);
+            if rc >= 0 { break; }
+        }
+        if rc < 0 {
+            fw_api::close(fd);
+            return E_RESOLVE;
+        }
     }
     // 不同固件/封装可能把 (object, chip) 两个输出写反；按内容判定。
     let (object, chip) = if crate::plausible_ptr(first) && (second == 1 || second == 2) {
@@ -201,6 +212,8 @@ unsafe fn motor_open() -> i32 {
     } else if crate::plausible_ptr(second) && (first == 1 || first == 2) {
         (second, first)
     } else {
+        crate::log::kv("resolve A ", first);
+        crate::log::kv("resolve B ", second);
         fw_api::close(fd);
         return E_RESOLVE;
     };
