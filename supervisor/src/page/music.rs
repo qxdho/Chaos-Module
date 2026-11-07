@@ -13,8 +13,8 @@ pub(crate) const MUSIC_PID: u32 = 37;
 
 const DIR: &[u8] = b"/data/wav/\0";
 const MAX_TRACKS: usize = 6;
-const NAME_MAX: usize = 56;
-const PATH_MAX: usize = 96;
+const NAME_MAX: usize = 96;
+const PATH_MAX: usize = 180;
 const STATUS_MAX: usize = 64;
 
 pub(crate) struct MusicPage;
@@ -236,7 +236,7 @@ unsafe fn scan() {
         let mut len = 0usize;
         while len < NAME_MAX - 1 && *name.add(len) != 0 { len += 1; }
         if len < 4 || len >= NAME_MAX - 1 { continue; }
-        if *name.add(len - 3) != b'.' || *name.add(len - 2) != b's' || *name.add(len - 1) != b'8' {
+        if *name.add(len - 3) != b'.' || (*name.add(len - 2) | 0x20) != b's' || *name.add(len - 1) != b'8' {
             continue;
         }
         if TRACK_N >= MAX_TRACKS { continue; }
