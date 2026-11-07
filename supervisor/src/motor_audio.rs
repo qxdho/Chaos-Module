@@ -442,8 +442,8 @@ unsafe fn motor_stop() {
 
 // ===== 播放器 =====
 
-const SRC_MAX: usize = 512;
-const OUT_MAX: usize = 1024;
+const SRC_MAX: usize = 1024;
+const OUT_MAX: usize = 2048;
 const PATH_MAX: usize = 96;
 
 struct Player {
