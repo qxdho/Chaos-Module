@@ -37,8 +37,8 @@ const REG_FIFO_DATA: u32 = 0x30;
 
 const CHIP1_OPS_OFF: u32 = 0x5AC;
 const CHIP2_OPS_OFF: u32 = 0x574;
-const CHIP1_RESET_OFF: u32 = 0x80;
-const CHIP2_RESET_OFF: u32 = 0x74;
+const CHIP1_RESET_OFF: u32 = 0x74;
+const CHIP2_RESET_OFF: u32 = 0x80;
 const OPS_STOP: u32 = 0x0C;
 const OPS_START: u32 = 0x14;
 const OPS_MODE: u32 = 0x28;
@@ -132,7 +132,7 @@ fn expected_ops(chip: u32) -> u32 {
 }
 
 unsafe fn id_at(base: u32, chip: u32) -> u8 {
-    ptr::read_volatile(base.wrapping_add(if chip == 1 { 0x470 } else { 0x480 }) as *const u8)
+    ptr::read_volatile(base.wrapping_add(if chip == 1 { 0x480 } else { 0x470 }) as *const u8)
 }
 
 // ===== 芯片寄存器访问 =====
@@ -384,7 +384,7 @@ unsafe fn motor_feed(buf: *const u8, len: usize) -> i32 {
     if !MOTOR.ready || !MOTOR.running { return E_STATE; }
     if len == 0 || len > 256 { return -22; }
     let stat_reg = if MOTOR.chip == 1 { REG_FIFO_STAT } else { 0x0E };
-    let busy_bit = if MOTOR.chip == 1 { 0x80 } else { 0x02 };
+    let busy_bit = if MOTOR.chip == 1 { 0x02 } else { 0x80 };
     let st = read8(stat_reg);
     if st < 0 { return st; }
     if (st as u8 & busy_bit) != 0 { return 0; }
