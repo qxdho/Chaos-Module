@@ -187,18 +187,23 @@ unsafe fn motor_open() -> i32 {
     if fd < 0 { return E_OPEN; }
     // 0x0c1b9701 返回的是驱动对象；芯片对象在 object+0x10 -> +0x18 -> +0x0。
     // 这段遍历与固件 LRA 驱动的对象布局对应，不能直接拿 object 当 base。
-    let mut object = 0u32;
-    let mut chip = 0u32;
+    let mut first = 0u32;
+    let mut second = 0u32;
     let f: FnResolve = transmute(FN_RESOLVE as usize);
-    let rc = f(fd, &mut object as *mut u32, &mut chip as *mut u32);
-    if rc < 0 || object == 0 || (chip != 1 && chip != 2) {
+    let rc = f(fd, &mut first as *mut u32, &mut second as *mut u32);
+    if rc < 0 {
         fw_api::close(fd);
         return E_RESOLVE;
     }
-    if !crate::plausible_ptr(object) {
+    // 不同固件/封装可能把 (object, chip) 两个输出写反；按内容判定。
+    let (object, chip) = if crate::plausible_ptr(first) && (second == 1 || second == 2) {
+        (first, second)
+    } else if crate::plausible_ptr(second) && (first == 1 || first == 2) {
+        (second, first)
+    } else {
         fw_api::close(fd);
         return E_RESOLVE;
-    }
+    };
     let expect = if chip == 1 { 0x0C40_12F5 } else { 0x0C3F_DDE5 };
     let stage1 = rd32_at(object.wrapping_add(0x10));
     let stage2 = if crate::plausible_ptr(stage1) {
